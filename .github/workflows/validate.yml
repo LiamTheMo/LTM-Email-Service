@@ -50,6 +50,9 @@ jobs:
       - name: Per-device mailbox authorization regression
         run: node --experimental-strip-types scripts/test-account-access.mjs
 
+      - name: Administrator privilege boundary and session policy regression
+        run: node --experimental-strip-types scripts/test-admin-auth-boundary.mjs
+
       - name: Mailbox rules and Junk heuristic tests
         run: node --experimental-strip-types scripts/test-mailbox-rules.mjs
 

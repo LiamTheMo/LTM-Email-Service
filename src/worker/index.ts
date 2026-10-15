@@ -1,4 +1,5 @@
 import { primaryProfilePath, protectedAccountPath, requestedMailAccount } from "./accountAccess";
+import { adminProtectedApiPath } from "./adminRoutePolicy";
 import { beginAdminLogin, adminPasswordConfigured, saveAdminPassword } from "./adminAuth";
 import { reconcileMailboxUsage } from "./usage";
 import {
@@ -128,6 +129,7 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
     deviceAccountIds(request, env),
   ]);
   if (!isAdmin && accountIds.length === 0) return unauthorizedResponse();
+  if (adminProtectedApiPath(url.pathname) && !isAdmin) return jsonError("Administrator passkey required", 403);
   if (url.pathname === "/api/admin/password" && request.method === "POST") {
     if (!isAdmin) return jsonError("Administrator verification required", 403);
     if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "admin-change-password"))))
@@ -149,12 +151,6 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
   if (url.pathname === "/api/admin/status" && request.method === "GET") {
     return Response.json({passwordConfigured:await adminPasswordConfigured(env)});
   }
-
-  const adminRoute = url.pathname === "/api/mailboxes"
-    || url.pathname.startsWith("/api/mailboxes/")
-    || url.pathname === "/api/auth/sessions"
-    || url.pathname.startsWith("/api/auth/sessions/");
-  if (adminRoute && !isAdmin) return jsonError("Administrator passkey required", 403);
 
   // The primary mailbox owns its profile photo. Other mailbox sessions must
   // not read or overwrite that image; owner passkey sessions remain authorized.

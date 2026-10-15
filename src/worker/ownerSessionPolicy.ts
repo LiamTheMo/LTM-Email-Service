@@ -9,12 +9,16 @@ export const OWNER_SESSION_COOKIE = "__Host-ltm_session";
  * In particular, do not decodeURIComponent attacker-controlled cookie text.
  */
 export function readOwnerSessionToken(request: Request): string | null {
+  let value: string | null = null;
   for (const part of (request.headers.get("Cookie") ?? "").split(";")) {
     const pair = part.trim();
     const index = pair.indexOf("=");
     if (index <= 0 || pair.slice(0, index) !== OWNER_SESSION_COOKIE) continue;
-    const value = pair.slice(index + 1);
-    return /^[A-Za-z0-9_-]{43}$/.test(value) ? value : null;
+    // Duplicate owner cookies are invalid, even if their values match.
+    if (value !== null) return null;
+    const candidate = pair.slice(index + 1);
+    if (!/^[A-Za-z0-9_-]{43}$/.test(candidate)) return null;
+    value = candidate;
   }
-  return null;
+  return value;
 }

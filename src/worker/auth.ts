@@ -11,11 +11,11 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { APP_ORIGIN, RP_ID } from "./config";
+import { OWNER_IDLE_TTL_SECONDS, OWNER_SESSION_COOKIE, OWNER_SESSION_TTL_SECONDS, readOwnerSessionToken } from "./ownerSessionPolicy";
 
-const SESSION_COOKIE = "__Host-ltm_session";
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const CHALLENGE_TTL_SECONDS = 5 * 60;
 const MAX_ACTIVE_SESSIONS = 5;
+const ownerIdleModifier = `-${OWNER_IDLE_TTL_SECONDS} seconds`;
 const OWNER_USER_ID = new TextEncoder().encode("ltm-mail-owner");
 
 type Ceremony = "registration" | "authentication";
@@ -67,20 +67,12 @@ function randomToken(): string {
   return base64Url(bytes);
 }
 
-function cookie(request: Request, name: string): string | null {
-  for (const part of (request.headers.get("Cookie") ?? "").split(";")) {
-    const [key, ...value] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(value.join("="));
-  }
-  return null;
-}
-
-function sessionCookie(token: string, maxAge = SESSION_TTL_SECONDS): string {
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
+function sessionCookie(token: string, maxAge = OWNER_SESSION_TTL_SECONDS): string {
+  return `${OWNER_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
 }
 
 function expiredSessionCookie(): string {
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
+  return `${OWNER_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
 }
 
 function parseTransports(value: string | null): AuthenticatorTransportFuture[] | undefined {
@@ -102,7 +94,7 @@ async function hasCredential(env: Env): Promise<boolean> {
 async function cleanup(env: Env): Promise<void> {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM auth_challenges WHERE expires_at <= datetime('now')"),
-    env.DB.prepare("DELETE FROM auth_sessions WHERE expires_at <= datetime('now')"),
+    env.DB.prepare("DELETE FROM auth_sessions WHERE expires_at <= datetime('now') OR last_seen_at <= datetime('now', ?)").bind(ownerIdleModifier),
   ]);
 }
 
@@ -114,7 +106,7 @@ async function createSession(env: Env, request: Request): Promise<string> {
     .bind(
       crypto.randomUUID(),
       await sha256Hex(token),
-      `+${SESSION_TTL_SECONDS} seconds`,
+      `+${OWNER_SESSION_TTL_SECONDS} seconds`,
       request.headers.get("User-Agent")?.slice(0, 512) ?? null,
     )
     .run();
@@ -133,14 +125,14 @@ async function createSession(env: Env, request: Request): Promise<string> {
 }
 
 export async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
-  const token = cookie(request, SESSION_COOKIE);
+  const token = readOwnerSessionToken(request);
   if (!token) return false;
 
   const hash = await sha256Hex(token);
   const row = await env.DB.prepare(
-    "SELECT 1 FROM auth_sessions WHERE token_hash = ? AND expires_at > datetime('now') LIMIT 1",
+    "SELECT 1 FROM auth_sessions WHERE token_hash = ? AND expires_at > datetime('now') AND last_seen_at > datetime('now', ?) LIMIT 1",
   )
-    .bind(hash)
+    .bind(hash, ownerIdleModifier)
     .first();
   if (!row) return false;
 
@@ -398,7 +390,7 @@ export async function verifyAuthentication(request: Request, env: Env): Promise<
 }
 
 export async function logout(request: Request, env: Env): Promise<Response> {
-  const token = cookie(request, SESSION_COOKIE);
+  const token = readOwnerSessionToken(request);
   if (token) {
     await env.DB.prepare("DELETE FROM auth_sessions WHERE token_hash = ?")
       .bind(await sha256Hex(token))
@@ -415,7 +407,7 @@ export async function logout(request: Request, env: Env): Promise<Response> {
 
 export async function sessionInfo(request: Request, env: Env): Promise<Response> {
   await cleanup(env);
-  const token = cookie(request, SESSION_COOKIE);
+  const token = readOwnerSessionToken(request);
   const current = token ? await sha256Hex(token) : null;
   const rows = await env.DB.prepare(`
     SELECT session_id, token_hash, created_at, last_seen_at, expires_at, user_agent
@@ -436,7 +428,7 @@ export async function sessionInfo(request: Request, env: Env): Promise<Response>
 }
 
 export async function resetSessions(request: Request, env: Env): Promise<Response> {
-  const token = cookie(request, SESSION_COOKIE);
+  const token = readOwnerSessionToken(request);
   if (!token) return unauthorizedResponse();
 
   const current = await sha256Hex(token);
@@ -451,7 +443,7 @@ export async function revokeSession(
   env: Env,
   sessionId: string,
 ): Promise<Response> {
-  const token = cookie(request, SESSION_COOKIE);
+  const token = readOwnerSessionToken(request);
   if (!token) return unauthorizedResponse();
 
   const current = await sha256Hex(token);
@@ -474,11 +466,11 @@ export const unauthorizedResponse = (): Response =>
 
 /** A hashed, verified owner cookie reference for scoped push subscriptions. */
 export async function ownerSessionHash(request: Request, env: Env): Promise<string | null> {
-  const t = cookie(request, SESSION_COOKIE);
+  const t = readOwnerSessionToken(request);
   if (!t) return null;
   const hash = await sha256Hex(t);
   const current = await env.DB.prepare(
-    "SELECT 1 FROM auth_sessions WHERE token_hash=?1 AND expires_at>datetime('now')"
-  ).bind(hash).first();
+    "SELECT 1 FROM auth_sessions WHERE token_hash=?1 AND expires_at>datetime('now') AND last_seen_at>datetime('now', ?)"
+  ).bind(hash, ownerIdleModifier).first();
   return current ? hash : null;
 }

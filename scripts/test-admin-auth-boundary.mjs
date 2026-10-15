@@ -19,8 +19,6 @@ for (const invalid of [
   "__Host-ltm_session=" + "a".repeat(44),
   "__Host-ltm_session=" + owner + "; __Host-ltm_session=" + owner,
 ]) {
-  // A duplicate cookie is also suspect; never trust ambiguous identities.
-  if (invalid.includes("; __Host-ltm_session=")) continue;
   assert.equal(readOwnerSessionToken(request(invalid)), null, invalid.slice(0,80));
 }
 assert.equal(readOwnerSessionToken(request("ltm_session=" + owner)), null);

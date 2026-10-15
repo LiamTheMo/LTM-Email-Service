@@ -48,4 +48,11 @@ assert.match(source, /await verifyAuthenticationResponse\(/);
 assert.match(source, /requireUserVerification: true/);
 assert.match(source, /consumePendingAdmin\(/,
   "MFA pending token must be consumed, not merely read");
+const router = readFileSync(new URL("../src/worker/index.ts", import.meta.url), "utf8");
+const guard = 'if (adminProtectedApiPath(url.pathname) && !isAdmin)';
+assert.ok(router.includes(guard), "route classification must be enforced at API boundary");
+assert.ok(router.indexOf(guard) < router.indexOf('if (url.pathname === "/api/admin/password"'),
+  "admin session guard must precede all protected admin handlers");
+assert.ok(router.indexOf(guard) < router.indexOf('if (url.pathname === "/api/admin/status"'),
+  "ordinary mailbox sessions must not query the admin configuration");
 console.log("PASS: owner session cookie constraints, expiration and admin route classification");

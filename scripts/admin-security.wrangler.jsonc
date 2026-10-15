@@ -1,0 +1,19 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "ltm-admin-local-security-probe",
+  "main": "../src/worker/index.ts",
+  "compatibility_date": "2026-09-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "PRIMARY_ADDRESS": "contact@liamthemo.com", "FORWARD_TO": "" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ltm-admin-probe",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "MAIL", "bucket_name": "ltm-admin-probe-mail" }
+  ]
+}

@@ -42,6 +42,7 @@ const TESTS = [
   "test-desktop-reader",
   "test-admin-ui",
   "test-search",
+  "test-mailbox-passwords",
   "test-reader-action-bar",
   "test-email-reader",
   "test-reader-bulk-delete",

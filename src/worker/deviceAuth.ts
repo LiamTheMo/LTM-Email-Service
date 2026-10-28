@@ -180,6 +180,44 @@ export async function deviceLogin(request: Request, env: Env): Promise<Response>
   if (setCookie) headers.append("Set-Cookie",setCookie);
   return Response.json({ ok: true, accountId: mailboxId }, { headers });
 }
+/**
+ * POST /api/account/password: someone signed in to a mailbox on this device
+ * changes its password with the current one. Other devices using the mailbox
+ * are signed out; this device stays signed in. admin@ uses the administrator
+ * password (Admin panel); Gmail passwords belong to Google.
+ */
+export async function changeOwnMailboxPassword(request: Request, env: Env): Promise<Response> {
+  const input = await request.json<{ accountId?: unknown; currentPassword?: unknown; newPassword?: unknown }>().catch(() => null);
+  const accountId = typeof input?.accountId === "string" ? input.accountId : "";
+  const currentPassword = typeof input?.currentPassword === "string" ? input.currentPassword : "";
+  if (accountId === ADMIN_MAILBOX_ID) return jsonError("The admin mailbox uses the administrator password. Change it in the admin panel.", 400);
+  if (!accountId.startsWith("native:")) return jsonError("Only custom-domain mailboxes have a password here", 400);
+  if (!(await deviceAccountIds(request, env)).includes(accountId)) {
+    return jsonError("Sign in to this mailbox with its password on this device first", 403);
+  }
+  if (!(await checkAuthRateLimit(env, authRateLimitBucket(request, "mailbox-change-password")))) {
+    return jsonError("Too many attempts. Try again later.", 429);
+  }
+  const accountBucket = accountRateLimitBucket("mailbox-change-password", accountId);
+  if (!(await countAccountLoginAttempt(env, accountBucket))) return jsonError("Too many attempts. Try again later.", 429);
+  const invalid = mailboxPasswordError(input?.newPassword);
+  if (invalid) return jsonError(invalid, 400);
+  const newPassword = input!.newPassword as string;
+  const record = await env.DB.prepare(`SELECT c.password_salt, c.password_hash, c.iterations
+    FROM native_mailboxes m JOIN native_mailbox_credentials c ON c.mailbox_id=m.id
+    WHERE m.id=?1 AND m.status='active' AND m.deleted_at IS NULL`)
+    .bind(accountId).first<{ password_salt: string; password_hash: string; iterations: number }>();
+  // 400, not 401: the session is fine, only the typed password is wrong.
+  if (!currentPassword || !(await checkPassword(currentPassword, record))) return jsonError("The current password is incorrect", 400);
+  if (newPassword === currentPassword) return jsonError("Choose a password different from the current one", 400);
+  await clearAccountLoginFailures(env, accountBucket);
+  // setMailboxPassword removes the mailbox from every device; this one keeps it.
+  await setMailboxPassword(env, accountId, newPassword);
+  await establishDeviceGrant(request, env, accountId, "native");
+  await env.DB.prepare("INSERT INTO mailbox_audit (id,mailbox_id,operation) VALUES (?1,?2,'password_change_self')")
+    .bind(crypto.randomUUID(), accountId).run();
+  return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+}
 export async function deviceRemoveAccount(request: Request, env: Env, accountId: string): Promise<Response> {
   const session = await currentDeviceSession(request, env);
   if (!session) return jsonError("Session not found", 401);

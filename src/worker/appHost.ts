@@ -10,7 +10,9 @@ import { jsonError } from "./http";
  * unaffected, because no domain has been recorded.
  */
 const LOCAL = new Set(["localhost", "127.0.0.1", "[::1]"]);
-const UNKNOWN_TTL_MS = 60_000;
+// Each isolate re-reads the address after a minute, so a new domain or a
+// deleted row (to serve workers.dev again) reaches every isolate quickly.
+const CACHE_TTL_MS = 60_000;
 let known: { hostname: string | null; at: number } | null = null;
 
 export const isWorkersDevHost = (hostname: string): boolean => /(^|\.)workers\.dev$/i.test(hostname);
@@ -19,7 +21,7 @@ const isOwnDomain = (url: URL): boolean =>
   url.protocol === "https:" && !isWorkersDevHost(url.hostname) && !LOCAL.has(url.hostname) && !/^[\d.]+$/.test(url.hostname);
 
 async function appHost(env: Env): Promise<string | null> {
-  if (known && (known.hostname || Date.now() - known.at < UNKNOWN_TTL_MS)) return known.hostname;
+  if (known && Date.now() - known.at < CACHE_TTL_MS) return known.hostname;
   const row = await env.DB.prepare("SELECT hostname FROM app_host WHERE id = 1").first<{ hostname: string }>().catch(() => null);
   known = { hostname: row?.hostname ?? null, at: Date.now() };
   return known.hostname;

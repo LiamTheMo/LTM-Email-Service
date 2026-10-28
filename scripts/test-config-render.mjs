@@ -69,7 +69,7 @@ assert.equal(renamed.name, "mail-two");
 assert.equal(renamed.vars.LTM_WORKER_NAME, "mail-two", "the name var follows a renamed Worker");
 assert.equal(renamed.r2_buckets[0].bucket_name, "mail-two-r2");
 assert.deepEqual(rendered.version_metadata, { binding: "CF_VERSION_METADATA" });
-assert.deepEqual(rendered.assets.run_worker_first, ["/api/*", "/", "/index.html", "/manifest.webmanifest"]);
+assert.deepEqual(rendered.assets.run_worker_first, ["/*", "!/assets/*", "!/sw.js", "!/theme-boot.js", "!/apple-touch-icon.png", "!/favicon.ico", "!/robots.txt"]);
 
 // Secrets never reach the rendered file, even if mis-set.
 const withSecrets = { ...production, RESEND_API_KEY: "re_super_secret_value", AUTH_SETUP_TOKEN: "setup-token-1234567890" };

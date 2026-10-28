@@ -450,7 +450,8 @@ export default {
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       return shellResponse(request, env);
     }
-    return env.ASSETS.fetch(request);
+    // Other page addresses get the app shell (single-page fallback) with the same headers.
+    return request.method === "GET" ? shellResponse(request, env) : env.ASSETS.fetch(request);
   },
 
   async email(message, env, ctx): Promise<void> {

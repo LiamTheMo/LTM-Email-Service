@@ -3,7 +3,7 @@
 // their API answers 404. Runs the Worker code on node:sqlite against the real
 // migrations, plus source checks on the router.
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -53,6 +53,23 @@ async function run(m) {
   await m.rememberAppHost(env, new URL("https://new.example.org/"));
   m.resetAppHostCache();
   assert.equal((await at(DEV, "/")).headers.get("Location"), "https://new.example.org/");
+
+  // Other isolates pick up a change or a deleted row within a minute.
+  const now = Date.now;
+  try {
+    let clock = now();
+    Date.now = () => clock;
+    await at(DEV, "/");
+    await env.DB.prepare("UPDATE app_host SET hostname = 'moved.example.org'").run();
+    assert.equal((await at(DEV, "/")).headers.get("Location"), "https://new.example.org/", "cached for a moment");
+    clock += 61_000;
+    assert.equal((await at(DEV, "/")).headers.get("Location"), "https://moved.example.org/", "a changed domain propagates");
+    await env.DB.prepare("DELETE FROM app_host").run();
+    clock += 61_000;
+    assert.equal(await at(DEV, "/"), null, "deleting the row serves workers.dev again");
+  } finally {
+    Date.now = now;
+  }
 }
 
 const out = mkdtempSync(join(tmpdir(), "ltm-app-host-"));
@@ -65,6 +82,21 @@ try {
   await run(await import(pathToFileURL(join(out, "bundle.mjs")).href));
 } finally {
   rmSync(out, { recursive: true, force: true });
+}
+
+// Every page address (not only "/") reaches the Worker, so single-page fallback
+// paths on workers.dev redirect too; the static files that skip it exist.
+const wrangler = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
+const first = JSON.parse(wrangler.match(/"run_worker_first":\s*(\[[^\]]*\])/)[1]);
+assert.equal(first[0], "/*");
+for (const pattern of first.slice(1)) {
+  assert.ok(pattern.startsWith("!/"), pattern);
+  if (pattern === "!/assets/*" || pattern === "!/favicon.ico") continue; // built, and generated at deploy
+  assert.ok(existsSync(new URL(`../public${pattern.slice(1)}`, import.meta.url)), `${pattern} names a static file`);
+}
+for (const file of readdirSync(new URL("../public/", import.meta.url))) {
+  if (file === "_headers") continue;
+  assert.ok(first.includes(`!/${file}`), `public/${file} is served without the Worker, keeping its _headers`);
 }
 
 // The router checks the address before anything else and records it only for owner sessions.

@@ -12,7 +12,10 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/", "/index.html", "/manifest.webmanifest"]
+    // Every path reaches the Worker first except the static files below, so
+    // app pages on workers.dev addresses can be redirected (v3.33) and the
+    // app shell always gets its security headers.
+    "run_worker_first": ["/*", "!/assets/*", "!/sw.js", "!/theme-boot.js", "!/apple-touch-icon.png", "!/favicon.ico", "!/robots.txt"]
   },
   "vars": {
     // The Worker's own name, used to route mail to it and to find it through

@@ -38,6 +38,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.29` | Admin panel normalized (one button size, themed dropdowns, green set-up chips, a steady chevron); attachments open in the system viewer and never replace the app; a solid status-bar strip for iOS 26 Safari |
 | `v3.30` | iOS 26 Safari: the top strip is tall enough for Safari to use it in a browser tab and with a message open, and the page has a plain root colour |
 | `v3.31` | SQL injection review of sign-in and search (no injection found; an end-to-end attack test added); long searches and long blocked domains no longer fail on D1's 50-byte LIKE limit |
+| `v3.32` | Users change their own mailbox password in Settings; admins choose a new mailbox's first password or leave it empty to generate one |
 
 ## Decisions applied in v3.05
 
@@ -259,4 +260,9 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Review:** every sign-in path (mailbox password, administrator password and passkey, setup) and every query in the Worker was read for SQL injection. User input only ever reaches D1 as a bound parameter (`?`); the few queries assembled at run time insert fixed strings, constants or `?` placeholders, the folder name is checked against a fixed list, and search text is matched as literal text. The administrator address is compared in code, never in SQL. No injection was found.
 - **Attack test:** a new end-to-end step (last, as it spends the sign-in rate limit) posts injection strings such as `' OR '1'='1`, `' OR 1=1 --`, `alice@…' --`, a `UNION SELECT` and a `DROP TABLE` to the mailbox and administrator sign-in, and as search text; every sign-in is refused (401 or 429) with no session, searches match nothing, and the tables are intact.
 - **Bugs found on the way:** D1 rejects LIKE patterns over 50 bytes, so a search of about 48 characters or more failed with a server error, and blocking a long domain failed when moving existing mail to Junk. Mail and draft search now find the whole term as literal text with `instr()` (no wildcards to escape and no length limit; a long search keeps its full meaning), and blocked domains use a suffix comparison instead of LIKE.
+
+## v3.32: self-service passwords
+
+- **Settings → Password:** anyone signed in to a custom-domain mailbox on a device can change its password by entering the current one (`POST /api/account/password`). The mailbox must be signed in on that device with its password (an administrator's passkey session does not count); the usual password rules apply; wrong current passwords are rate limited per network and per mailbox, with the same allowance as sign-in. Every other device using the mailbox is signed out and the device used stays signed in; the change is recorded in the mailbox audit log. admin@ keeps using the administrator password (Admin panel); Gmail passwords are changed with Google.
+- **Creating a mailbox:** the administrator can enter its first password (with a confirmation). Left empty, a strong password is generated and shown once, as before. A chosen password is never sent back by the server.
 

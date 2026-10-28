@@ -28,6 +28,9 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
   const [loaded, setLoaded] = useState(false);
   const [address, setAddress] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [newCredential, setNewCredential] = useState<{ address: string; password: string } | null>(null);
@@ -83,14 +86,22 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (newPassword && newPassword !== newPasswordConfirm) {
+      setNotice("The passwords do not match");
+      return;
+    }
+    const chosen = newPassword !== "";
     await run("new", async () => {
       const fullAddress = address.includes("@") || !domain ? address.trim() : `${address.trim()}@${domain}`;
-      const created = await api("/api/mailboxes", "POST", { address: fullAddress, displayName });
-      if (typeof created.password === "string") {
-        setNewCredential({ address: String((created.mailbox as Mailbox).email_address), password: created.password });
-      }
-      setAddress(""); setDisplayName("");
-    }, "Mailbox created. Cloudflare catch-all routing must be configured for new addresses to receive mail.");
+      // Without a password the server generates one and shows it once.
+      const created = await api("/api/mailboxes", "POST", { address: fullAddress, displayName, ...(chosen ? { password: newPassword } : {}) });
+      setNewCredential(typeof created.password === "string"
+        ? { address: String((created.mailbox as Mailbox).email_address), password: created.password }
+        : null);
+      setAddress(""); setDisplayName(""); setNewPassword(""); setNewPasswordConfirm(""); setShowNewPassword(false);
+    }, chosen
+      ? "Mailbox created with the password you chose. Cloudflare catch-all routing must be configured for new addresses to receive mail."
+      : "Mailbox created. Cloudflare catch-all routing must be configured for new addresses to receive mail.");
   }
 
   async function change(box: Mailbox, status: "active" | "disabled") {
@@ -203,7 +214,7 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
       <div className="admin-mailbox-create">
         <div className="admin-subsection-heading">
           <h3>Create an address</h3>
-          <p>A secure password will be generated for the new mailbox.</p>
+          <p>Choose a password, or leave it empty and a secure one is generated.</p>
         </div>
         <form className="mailbox-create-form" onSubmit={e => void create(e)}>
           <label htmlFor="new-mailbox-address">
@@ -225,6 +236,24 @@ export function MailboxManager({ onChanged }: { onChanged: () => void }) {
             <input id="new-mailbox-name" maxLength={80} value={displayName} onChange={e => setDisplayName(e.target.value)}
               placeholder="Personal" className="mailbox-entry-input" />
           </label>
+          <label htmlFor="new-mailbox-password">
+            <span>Password <span className="admin-field-optional">(optional)</span></span>
+            <input id="new-mailbox-password" type={showNewPassword ? "text" : "password"} autoComplete="new-password"
+              minLength={4} maxLength={32} value={newPassword} onChange={e => setNewPassword(e.target.value)}
+              placeholder="Leave empty to generate one" className="mailbox-entry-input" />
+          </label>
+          {newPassword ? (
+            <label htmlFor="new-mailbox-password-confirm">
+              Confirm password
+              <input id="new-mailbox-password-confirm" type={showNewPassword ? "text" : "password"} autoComplete="new-password"
+                minLength={4} maxLength={32} value={newPasswordConfirm} onChange={e => setNewPasswordConfirm(e.target.value)}
+                required className="mailbox-entry-input" />
+            </label>
+          ) : null}
+          {newPassword ? (
+            <label className="mailbox-password-show"><input type="checkbox" checked={showNewPassword}
+              onChange={e => setShowNewPassword(e.target.checked)} /> Show password</label>
+          ) : null}
           <button className="settings-primary" type="submit" disabled={busy !== null || !address.trim()}>
             {busy === "new" ? "Creating…" : "Create mailbox"}
           </button>

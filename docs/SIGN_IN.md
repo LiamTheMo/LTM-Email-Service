@@ -39,7 +39,8 @@ Admin sessions last 12 hours and end after 1 hour idle. Sensitive admin changes 
 ## Passwords
 
 - **Admin password:** chosen at first-run setup. Instances set up before v3.12 without one see **Set up admin password using passkey** on the sign-in page. Change it with **Admin panel → Change administrator password**; this signs out every admin session, and the passkey is unchanged.
-- **Mailbox passwords:** **Admin → Mailboxes → Change password** (choose one) or **More actions → Generate password** (shown once). This signs out that mailbox's devices only.
+- **Mailbox passwords:** when creating a mailbox the administrator can choose its first password, or leave it empty to have a strong one generated (shown once). Afterwards: **Admin → Mailboxes → Change password** (choose one) or **More actions → Generate password** (shown once); this signs out that mailbox's devices only.
+- **Changing your own password:** anyone signed in to a mailbox can change its password in **Settings → Password** by entering the current one. Other devices using the mailbox are signed out; the device used stays signed in. admin@ uses the administrator password instead (Admin panel); Gmail passwords are changed with Google.
 
 Passwords are 4–32 characters. Never put them in repository files, build variables or chat.
 

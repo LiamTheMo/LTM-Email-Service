@@ -525,3 +525,53 @@ select.signin-domain { padding-right: 30px; color: var(--text); color-scheme: da
     padding-top: calc(env(safe-area-inset-top) + 6px);
   }
 }
+
+/* v3.32 Settings → Password: change a mailbox's password. */
+.settings-password-form {
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+}
+.settings-password-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.settings-password-form select {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-field-border);
+  border-radius: 10px;
+  background: var(--ui-field);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.settings-password-form .settings-password-show {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 500;
+}
+.settings-password-form small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.settings-password-form .settings-primary {
+  justify-self: start;
+}
+.settings-password-ok,
+.settings-password-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.settings-password-ok {
+  color: var(--color-success);
+}
+.settings-password-error {
+  color: var(--ui-error-text);
+}

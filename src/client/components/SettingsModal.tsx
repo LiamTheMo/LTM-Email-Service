@@ -2,6 +2,7 @@ import type { ConnectedAccount, NotificationState } from "../mailTypes";
 import { notificationLabel } from "../mailUtils";
 import { useInstance } from "../instance";
 import { AboutSettings, AppearanceSettings } from "./AppearanceSettings";
+import { ChangePassword } from "./ChangePassword";
 import { BlockedSenders } from "./BlockedSenders";
 import { setRemoteImagesMode, useRemoteImagesMode } from "../remoteImages";
 
@@ -133,6 +134,8 @@ export function SettingsModal(props: Props) {
           <RemoteImagesSetting />
 
           <BlockedSenders accounts={props.accounts} preferredAccountId={props.activeAccountId} />
+
+          <ChangePassword accounts={props.accounts} preferredAccountId={props.activeAccountId} />
 
           <section className="settings-section">
             <h3>Security &amp; sessions</h3>

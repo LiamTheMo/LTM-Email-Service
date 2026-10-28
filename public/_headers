@@ -6,6 +6,7 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()
   Cross-Origin-Opener-Policy: same-origin
   Strict-Transport-Security: max-age=31536000
+  X-Robots-Tag: noindex, nofollow
 
 /index.html
   Cache-Control: no-store

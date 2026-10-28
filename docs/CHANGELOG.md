@@ -39,6 +39,7 @@ What changed in each v3 version, with the technical detail. `main` runs the vers
 | `v3.30` | iOS 26 Safari: the top strip is tall enough for Safari to use it in a browser tab and with a message open, and the page has a plain root colour |
 | `v3.31` | SQL injection review of sign-in and search (no injection found; an end-to-end attack test added); long searches and long blocked domains no longer fail on D1's 50-byte LIKE limit |
 | `v3.32` | Users change their own mailbox password in Settings; admins choose a new mailbox's first password or leave it empty to generate one |
+| `v3.33` | One public address: workers.dev and preview links redirect to the app's own domain and refuse the API; the site asks search engines not to index it (migration 0027) |
 
 ## Decisions applied in v3.05
 
@@ -260,6 +261,13 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Review:** every sign-in path (mailbox password, administrator password and passkey, setup) and every query in the Worker was read for SQL injection. User input only ever reaches D1 as a bound parameter (`?`); the few queries assembled at run time insert fixed strings, constants or `?` placeholders, the folder name is checked against a fixed list, and search text is matched as literal text. The administrator address is compared in code, never in SQL. No injection was found.
 - **Attack test:** a new end-to-end step (last, as it spends the sign-in rate limit) posts injection strings such as `' OR '1'='1`, `' OR 1=1 --`, `alice@…' --`, a `UNION SELECT` and a `DROP TABLE` to the mailbox and administrator sign-in, and as search text; every sign-in is refused (401 or 429) with no session, searches match nothing, and the tables are intact.
 - **Bugs found on the way:** D1 rejects LIKE patterns over 50 bytes, so a search of about 48 characters or more failed with a server error, and blocking a long domain failed when moving existing mail to Junk. Mail and draft search now find the whole term as literal text with `instr()` (no wildcards to escape and no length limit; a long search keeps its full meaning), and blocked domains use a suffix comparison instead of LIKE.
+
+## v3.33: one public address
+
+- **workers.dev and preview links:** Cloudflare serves every Worker on `<name>.<account>.workers.dev` and on per-version preview links as well as its custom domain, so the sign-in page and the whole API had a second public address that skips anything set up on the domain's zone. The Worker now records the custom domain an administrator (passkey) session is used on (`app_host`, migration 0027). From then on, requests on any `*.workers.dev` address are answered before routing: pages get a 308 redirect to the recorded domain, every other request (the API included) gets 404. The signed Resend webhook is the one exception. Instances never opened by an administrator on a custom domain keep working on `workers.dev`.
+- **Not indexed:** every response carries `X-Robots-Tag: noindex, nofollow` (static assets, the app shell and the API), and `robots.txt` disallows everything.
+- **Audit:** signed-out requests to every API route answer 401, except the sign-in and branding routes the sign-in page needs (`/api/instance`, `/api/auth/status`, `/api/device/status`, the login and setup routes); unknown routes also answer 401, so routes cannot be discovered while signed out. Session cookies are `HttpOnly; Secure; SameSite`. Route names in the app's JavaScript are visible to anyone who loads the page, as on every web app; access is enforced by the server.
+- Test: `test-app-host`.
 
 ## v3.32: self-service passwords
 

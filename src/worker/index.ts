@@ -11,7 +11,7 @@ import { beginAdminLogin, adminPasswordConfigured, saveAdminPassword } from "./a
 import { reconcileMailboxUsage } from "./usage";
 import {
   deviceStatus, deviceLogin, deviceLogout, deviceRemoveAccount, deviceAccountIds,
-  deviceAuthorized, adminAuthorized, rotateMailboxPassword, setMailboxPassword, cleanupDeviceSessions,
+  deviceAuthorized, adminAuthorized, rotateMailboxPassword, setMailboxPassword, cleanupDeviceSessions, changeOwnMailboxPassword,
 } from "./deviceAuth";
 import { allNativeMailboxes, createNativeMailbox, updateNativeMailbox, scheduleNativeMailboxDeletion, restoreNativeMailbox, purgeNativeMailbox, purgeExpiredNativeMailboxes, ADMIN_MAILBOX_ID } from "./mailboxes";
 import { getAccountAvatar } from "./api/accountAvatar";
@@ -353,6 +353,8 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
   if (url.pathname === "/api/blocked-senders" && request.method === "DELETE") return removeBlockedSender(env, url);
   if (url.pathname === "/api/send" && request.method === "POST") return sendEmail(request, env);
   if (url.pathname === "/api/drafts" && request.method === "POST") return saveDraft(request, env);
+
+  if (url.pathname === "/api/account/password" && request.method === "POST") return changeOwnMailboxPassword(request, env);
 
   if (url.pathname === "/api/profile/photo") {
     if (request.method === "GET") return getProfilePhoto(env, url);

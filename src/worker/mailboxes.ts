@@ -1,6 +1,7 @@
 import { toBase64Url } from "./bytes";
 import { aliasTarget, normalizeMailboxAddress } from "./mailboxRules";
 import { credentialForMailbox } from "./deviceAuth";
+import { mailboxPasswordError } from "./mailboxPasswordPolicy";
 import { instanceSettings } from "./branding";
 import { addressRules, postmasterMailboxId } from "./domains";
 import { normalizeHex } from "./customization";
@@ -71,7 +72,7 @@ export async function allNativeMailboxes(env: Env): Promise<NativeMailbox[]> {
 }
 
 export async function createNativeMailbox(request: Request, env: Env): Promise<Response> {
-  const body = await request.json<{ address?: unknown; displayName?: unknown }>().catch(() => null);
+  const body = await request.json<{ address?: unknown; displayName?: unknown; password?: unknown }>().catch(() => null);
   const rules = await addressRules(env, "create");
   const address = typeof body?.address === "string" ? normalizeMailboxAddress(body.address, rules) : null;
   if (!address) {
@@ -80,8 +81,15 @@ export async function createNativeMailbox(request: Request, env: Env): Promise<R
   const displayName = typeof body?.displayName === "string" ? safeDisplayName(body.displayName) : "";
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM native_mailboxes").first<{ n: number }>();
   if ((count?.n ?? 0) >= (await instanceSettings(env)).mail.maxMailboxes) return Response.json({ error: "Mailbox limit reached" }, { status: 409 });
+  // An administrator may choose the first password; without one, a strong
+  // password is generated and shown once.
+  const supplied = body?.password;
+  if (supplied !== undefined && supplied !== null && typeof supplied !== "string") return Response.json({ error: "Invalid password" }, { status: 400 });
+  const chosen = typeof supplied === "string" && supplied !== "";
+  const invalid = chosen ? mailboxPasswordError(supplied) : null;
+  if (invalid) return Response.json({ error: invalid }, { status: 400 });
   const id = `native:${crypto.randomUUID()}`;
-  const password = toBase64Url(crypto.getRandomValues(new Uint8Array(24)));
+  const password = chosen ? supplied : toBase64Url(crypto.getRandomValues(new Uint8Array(24)));
   const credential = await credentialForMailbox(id,password);
   try {
     // Atomic mailbox plus credential creation; do not expose plaintext except
@@ -98,7 +106,8 @@ export async function createNativeMailbox(request: Request, env: Env): Promise<R
     return Response.json({ error: "Mailbox already exists or could not be created" }, { status: 409 });
   }
   await audit(env, id, "create");
-  return Response.json({ mailbox: await mailboxById(env, id), password }, { status: 201 });
+  // A chosen password is never echoed back; a generated one is shown once.
+  return Response.json({ mailbox: await mailboxById(env, id), ...(chosen ? {} : { password }) }, { status: 201, headers: { "Cache-Control": "no-store" } });
 }
 
 

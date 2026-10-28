@@ -901,6 +901,67 @@ export async function run() {
           await session.context.close();
         }
       }],
+      ["admins choose a mailbox's first password; users change their own in Settings", async () => {
+        // The administrator creates a mailbox with a chosen password: nothing is generated or shown.
+        const adminPage = admin.page;
+        await adminPage.bringToFront();
+        await adminPage.goto(`${worker.origin}/#admin`);
+        await adminPage.reload();
+        await adminPage.waitForSelector("#new-mailbox-address");
+        await adminPage.fill("#new-mailbox-address", "bob");
+        await adminPage.fill("#new-mailbox-password", "Garden-Path9");
+        await adminPage.fill("#new-mailbox-password-confirm", "Garden-Path9");
+        await adminPage.getByRole("button", { name: "Create mailbox" }).click();
+        await adminPage.locator(".admin-mailbox-notice", { hasText: "with the password you chose" }).waitFor({ timeout: 20_000 });
+        assert.equal(await adminPage.locator(".mailbox-generated-password").count(), 0, "a chosen password is not shown back");
+        const bobId = (await adminApi("/api/mailboxes")).json.mailboxes.find(box => box.email_address === `bob@${DOMAIN}`).id;
+
+        const phone = await browser.newContext();
+        const laptop = await browser.newContext();
+        try {
+          const phoneApi = api(phone, worker.origin);
+          const laptopApi = api(laptop, worker.origin);
+          const login = (who, password) => who("/api/device/login", { method: "POST", body: { email: `bob@${DOMAIN}`, password } });
+          assert.equal((await login(phoneApi, "Garden-Path9")).status, 200, "bob signs in with the chosen password");
+          assert.equal((await login(laptopApi, "Garden-Path9")).status, 200);
+          const inbox = who => who(`/api/messages?accountId=${encodeURIComponent(bobId)}&folder=inbox`);
+
+          // Settings → Password on the laptop: a wrong current password is refused, the right one works.
+          const page = await laptop.newPage();
+          await page.goto(worker.origin);
+          await page.waitForSelector(".mail-list-pane", { timeout: 20_000 });
+          await page.locator(".desktop-sidebar button", { hasText: "Settings" }).click();
+          const form = page.locator(".settings-password-form");
+          await form.waitFor();
+          await form.getByLabel("Current password").fill("not-it");
+          await form.getByLabel("New password", { exact: true }).fill("River-Stone4");
+          await form.getByLabel("Confirm new password").fill("River-Stone4");
+          await form.getByRole("button", { name: "Change password" }).click();
+          await form.locator(".settings-password-error", { hasText: "current password is incorrect" }).waitFor();
+          await form.getByLabel("Current password").fill("Garden-Path9");
+          await form.getByRole("button", { name: "Change password" }).click();
+          await form.locator(".settings-password-ok").waitFor();
+
+          assert.equal((await inbox(laptopApi)).status, 200, "this device stays signed in");
+          assert.ok([401, 403].includes((await inbox(phoneApi)).status), "the other device is signed out");
+          assert.equal((await login(phoneApi, "Garden-Path9")).status, 401, "the old password no longer works");
+          assert.equal((await login(phoneApi, "River-Stone4")).status, 200, "the new one does");
+
+          // Guards: not another mailbox, not admin@, not weak, not without a session.
+          const change = (who, body) => who("/api/account/password", { method: "POST", body });
+          assert.equal((await change(laptopApi, { accountId: state.aliceId, currentPassword: "x", newPassword: "Another-One5" })).status, 403, "only mailboxes signed in on this device");
+          assert.equal((await change(adminApi, { accountId: "native:admin", currentPassword: "x", newPassword: "Another-One5" })).status, 400, "admin@ uses the administrator password");
+          assert.equal((await change(laptopApi, { accountId: bobId, currentPassword: "River-Stone4", newPassword: "ab" })).status, 400, "the password rules apply");
+          const stranger = await browser.newContext();
+          try {
+            assert.equal((await change(api(stranger, worker.origin), { accountId: bobId, currentPassword: "River-Stone4", newPassword: "Another-One5" })).status, 401);
+          } finally { await stranger.close(); }
+        } finally {
+          await phone.close();
+          await laptop.close();
+        }
+      }],
+
       ["SQL injection in the sign-in fields and in search changes nothing (runs last: it spends the rate limit)", async () => {
         const stranger = await browser.newContext();
         try {

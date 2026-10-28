@@ -35,6 +35,7 @@ import {
   verifyRegistration,
 } from "./auth";
 import { appOrigin } from "./config";
+import { rememberAppHost, workersDevResponse } from "./appHost";
 import { instanceResponse, manifestResponse, shellResponse } from "./instance";
 import { bootstrapInstance } from "./bootstrap";
 import { addBlockedSender, listBlockedSenders, removeBlockedSender } from "./blockedSenders";
@@ -94,6 +95,7 @@ function secureApiResponse(response: Response): Response {
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "DENY");
   headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  headers.set("X-Robots-Tag", "noindex, nofollow");
 
   return new Response(response.body, {
     status: response.status,
@@ -163,6 +165,8 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
     deviceAccountIds(request, env),
   ]);
   if (!isAdmin && accountIds.length === 0) return unauthorizedResponse();
+  // The administrator's own domain becomes the app's only address (v3.33).
+  if (isAdmin) ctx.waitUntil(rememberAppHost(env, url).catch(() => undefined));
   if (adminProtectedApiPath(url.pathname) && !isAdmin) return jsonError("Administrator passkey required", 403);
   // Remote images in mail, fetched privately for any signed-in reader.
   if (url.pathname === "/api/image-proxy" && request.method === "GET") return imageProxy(request);
@@ -409,6 +413,9 @@ async function routeApi(request: Request, env: Env, url: URL, ctx: ExecutionCont
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
+    // workers.dev and preview addresses stop serving the app once it has its own domain.
+    const elsewhere = await workersDevResponse(request, env, url);
+    if (elsewhere) return url.pathname.startsWith("/api/") ? secureApiResponse(elsewhere) : elsewhere;
     if (url.pathname.startsWith("/api/")) {
       await bootstrapInstance(env);
       env = await withStoredKeys(env);
@@ -443,7 +450,8 @@ export default {
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       return shellResponse(request, env);
     }
-    return env.ASSETS.fetch(request);
+    // Other page addresses get the app shell (single-page fallback) with the same headers.
+    return request.method === "GET" ? shellResponse(request, env) : env.ASSETS.fetch(request);
   },
 
   async email(message, env, ctx): Promise<void> {

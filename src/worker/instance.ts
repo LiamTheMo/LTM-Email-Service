@@ -89,6 +89,7 @@ const SHELL_HEADERS: Record<string, string> = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Strict-Transport-Security": "max-age=31536000",
+  "X-Robots-Tag": "noindex, nofollow",
 };
 
 /** Serve index.html with the instance name, so iOS sees it when installing the PWA. */

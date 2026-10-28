@@ -7,6 +7,10 @@ Back up D1 **and** R2 before big updates. Then:
 
 Deploys apply migrations, and the app applies any still pending on its first request. Migrations never remove columns or tables that older versions read, so an older v3 version keeps working on a newer database (some migrations also normalise stored data). What changed in each version: [CHANGELOG.md](./CHANGELOG.md).
 
+## v3.33
+
+- Migration 0027 (applied by the deploy). After updating, open the app once on your custom domain signed in as administrator: from then on `workers.dev` and preview links redirect there. If Gmail or a bookmark used the `workers.dev` address, switch it to the custom domain. Instances used only on `workers.dev`: nothing to do.
+
 ## v3.32
 
 - No configuration changes. Tell your mailbox users they can now change their own password in Settings → Password.

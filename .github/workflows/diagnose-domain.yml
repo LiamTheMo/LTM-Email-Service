@@ -1,0 +1,45 @@
+name: Diagnose email domain reachability
+
+# Diagnostic only. This workflow never deploys or changes configuration.
+on:
+  push:
+    branches:
+      - diagnose/v3.33-email-domain-connection
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check public DNS and HTTPS
+        shell: bash
+        run: |
+          set +e
+          echo '=== Public DNS: Cloudflare and Google recursive resolvers ==='
+          for hostname in email.liamthemo.com liamthemo.com ltm-email-service.orangecheasy.workers.dev; do
+            echo "--- $hostname"
+            for server in 1.1.1.1 8.8.8.8; do
+              echo "@$server A"
+              dig +time=3 +tries=1 @"$server" "$hostname" A +noall +answer +comments
+              echo "@$server CNAME"
+              dig +time=3 +tries=1 @"$server" "$hostname" CNAME +noall +answer +comments
+            done
+          done
+          echo '=== Authoritative DNS parent ==='
+          dig +time=3 +tries=1 liamthemo.com NS +noall +answer +comments
+          dig +trace +time=3 +tries=1 email.liamthemo.com A | tail -65
+          echo '=== DoH Cloudflare/Google ==='
+          curl -sS --max-time 8 'https://dns.google/resolve?name=email.liamthemo.com&type=A'
+          echo
+          curl -sS --max-time 8 'https://cloudflare-dns.com/dns-query?name=email.liamthemo.com&type=A' -H 'accept: application/dns-json'
+          echo
+          echo '=== HTTPS HEAD on public site and Worker ==='
+          for url in 'https://email.liamthemo.com/' 'https://email.liamthemo.com/api/instance' 'https://ltm-email-service.orangecheasy.workers.dev/'; do
+            echo "--- $url"
+            curl --silent --show-error --location --head --max-time 12 --max-redirs 2 -w 'result http=%{http_code} remote_ip=%{remote_ip} namelookup=%{time_namelookup} connect=%{time_connect} ssl=%{time_appconnect} total=%{time_total}\n' "$url" 2>&1 | head -40
+          done
+          echo '=== End diagnostic (no settings changed) ==='

@@ -42,4 +42,18 @@ jobs:
             echo "--- $url"
             curl --silent --show-error --location --head --max-time 12 --max-redirs 2 -w 'result http=%{http_code} remote_ip=%{remote_ip} namelookup=%{time_namelookup} connect=%{time_connect} ssl=%{time_appconnect} total=%{time_total}\n' "$url" 2>&1 | head -40
           done
+          echo '=== AAAA IPv6 records ==='
+          for server in 1.1.1.1 8.8.8.8; do
+            dig +time=3 +tries=1 @"$server" email.liamthemo.com AAAA +noall +answer +comments
+          done
+          echo '=== HTTP GET (not HEAD) public API and root over both IP families ==='
+          for url in 'https://email.liamthemo.com/' 'https://email.liamthemo.com/api/instance' 'https://email.liamthemo.com/api/auth/status' 'https://email.liamthemo.com/assets/'; do
+            echo "--- $url"
+            for ipversion in -4 -6; do
+              echo "$ipversion"
+              curl "$ipversion" --silent --show-error --max-time 10 --max-redirs 2 -o /tmp/domain-response -w 'result http=%{http_code} remote_ip=%{remote_ip} ssl=%{time_appconnect} total=%{time_total} bytes=%{size_download}\\n' "$url"
+              head -c 260 /tmp/domain-response
+              echo
+            done
+          done
           echo '=== End diagnostic (no settings changed) ==='

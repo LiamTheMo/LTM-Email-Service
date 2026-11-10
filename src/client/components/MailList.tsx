@@ -5,6 +5,7 @@ import { Icon } from "./Icon";
 import { SenderAvatar } from "./SenderAvatar";
 import { TopBar } from "./TopBar";
 import { threadKey } from "../allInboxes";
+import { applyListFilter, type ListFilter } from "../mailListFilter";
 
 type Props = {
   folder: Folder;
@@ -34,7 +35,6 @@ type Props = {
   onToggleNotifications: () => void;
 };
 
-type ListFilter = "all" | "unread" | "starred";
 const PULL_TRIGGER_PX = 64;
 const MAX_PULL_PX = 86;
 
@@ -196,13 +196,11 @@ export function MailList({
     return [...collapsed.values()];
   }, [folder, messages, selectionMode]);
 
+  // The open message stays listed under Unread/Starred even though opening it
+  // marked it read: it leaves only when the reader closes or another opens.
   const visible = useMemo(
-    () => !filtersEnabled || listFilter === "all"
-      ? threadedMessages
-      : listFilter === "unread"
-        ? threadedMessages.filter((message) => !message.isRead)
-        : threadedMessages.filter((message) => message.isStarred),
-    [filtersEnabled, listFilter, threadedMessages],
+    () => applyListFilter(threadedMessages, messages, filtersEnabled ? listFilter : "all", selectedId),
+    [filtersEnabled, listFilter, threadedMessages, messages, selectedId],
   );
 
   return <section className="mail-list-pane">

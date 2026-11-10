@@ -513,6 +513,40 @@ export async function run() {
         assert.deepEqual(await navItem(page, "Inbox").locator(".nav-count").allInnerTexts(), [], "no unread badge on an empty Inbox");
       }],
 
+      ["opening mail under the Unread tab keeps it open until it is closed", async () => {
+        const { page } = alice;
+        state.page = page;
+        const aliceApi = api(alice.context, worker.origin);
+        const account = `accountId=${encodeURIComponent(state.aliceId)}`;
+        for (const subject of ["Keep open one", "Keep open two"]) {
+          assert.equal((await deliver(worker.origin, { from: "k@partner.test", to: `alice@${DOMAIN}`, subject, text: "x" })).status, 200);
+        }
+        await page.reload();
+        await page.waitForSelector(".mail-list-pane");
+        await navItem(page, "Inbox").click();
+        await page.locator(".mail-filter-tabs button", { hasText: "Unread" }).click();
+        const rowOne = page.locator(".mail-row", { hasText: "Keep open one" });
+        await rowOne.click();
+        await page.locator(".reader-pane h2", { hasText: "Keep open one" }).waitFor();
+        // The open message is read now (server side) yet stays listed and selected.
+        await page.waitForTimeout(700);
+        assert.equal((await aliceApi(`/api/messages?${account}&folder=inbox`)).json.messages
+          .find(m => m.subject === "Keep open one").isRead, true);
+        await rowOne.waitFor();
+        assert.ok(await rowOne.evaluate(node => node.classList.contains("selected")), "the open row stays highlighted");
+        // Refreshing the list does not close it either.
+        await page.locator('.topbar-icon-button[aria-label="Refresh mailbox"]').click();
+        await page.waitForTimeout(700);
+        await rowOne.waitFor();
+        await page.locator(".reader-pane h2", { hasText: "Keep open one" }).waitFor();
+        // Opening another message releases the first from the Unread list.
+        await page.locator(".mail-row", { hasText: "Keep open two" }).click();
+        await page.locator(".reader-pane h2", { hasText: "Keep open two" }).waitFor();
+        await rowOne.waitFor({ state: "detached" });
+        await page.locator(".mail-row", { hasText: "Keep open two" }).waitFor();
+        await page.locator(".mail-filter-tabs button", { hasText: "All" }).click();
+      }],
+
       ["the list never stays on \"Loading mail…\" after a refresh overlaps a load", async () => {
         const { page } = alice;
         const spinner = page.locator(".mail-list-state", { hasText: "Loading mail" });

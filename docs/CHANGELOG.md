@@ -268,6 +268,7 @@ Superseded design details: `BRANDING_SOURCE`, `MAIL_DOMAINS` seeding and `ADMIN_
 - **Not indexed:** every response carries `X-Robots-Tag: noindex, nofollow` (static assets, the app shell and the API), and `robots.txt` disallows everything.
 - **Audit:** signed-out requests to every API route answer 401, except the sign-in and branding routes the sign-in page needs (`/api/instance`, `/api/auth/status`, `/api/device/status`, the login and setup routes); unknown routes also answer 401, so routes cannot be discovered while signed out. Session cookies are `HttpOnly; Secure; SameSite`. Route names in the app's JavaScript are visible to anyone who loads the page, as on every web app; access is enforced by the server.
 - Test: `test-app-host`.
+- **Unread tab keeps the open mail:** opening a message marks it read, and the Unread tab hid every read message, so the open message's row vanished the moment it opened (most visible to an administrator going through other mailboxes' unread mail). The conversation open in the reader now stays listed and highlighted under Unread (and Starred, for un-starring) until the reader is closed (Back, delete, archive, another folder or account) or another message is opened. Test: `test-unread-filter`, plus an end-to-end check.
 
 ## v3.32: self-service passwords
 
